@@ -2,21 +2,7 @@ name = "givehub"
 main = "src/worker.js"
 compatibility_date = "2025-01-01"
 
-# Bind to your D1 database after running:
-#   npx wrangler d1 create givehub-db
-# then paste the returned database_id below.
 [[d1_databases]]
 binding = "DB"
 database_name = "givehub-db"
-database_id = "REPLACE_ME_AFTER_D1_CREATE"
-
-# Secrets (set via `npx wrangler secret put <NAME>`):
-#   JWT_SECRET
-#   ADMIN_SECRET
-#   GSG_API_KEY
-#   GSG_WEBHOOK_SECRET
-
-# R2 bucket for logo/hero uploads (optional for MVP):
-# [[r2_buckets]]
-# binding = "ASSETS"
-# bucket_name = "givehub-assets"
+database_id = "fda3378b-cc53-4a0c-aad9-51528f251d47"
