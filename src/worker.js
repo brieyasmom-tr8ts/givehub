@@ -149,7 +149,10 @@ async function fetchGsgCampaign(gsgCampaignId, env) {
 // ---------- Route handlers ----------
 
 async function handleSignup(request, env) {
-  const { org_name, slug, email, password } = await request.json();
+  const body = await request.json();
+  const { org_name, email, password } = body;
+  // Normalize slug: lowercase, strip invalid chars
+  const slug = (body.slug || '').toLowerCase().trim().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
   if (!org_name || !slug || !email || !password)
     return err('Missing required fields');
 
@@ -199,9 +202,10 @@ async function handleLogin(request, env) {
 }
 
 async function handlePublicHub(slug, env) {
+  const normalized = (slug || '').toLowerCase();
   const org = await env.DB.prepare(
     'SELECT id, slug, name FROM organizations WHERE slug = ? AND status = "active"'
-  ).bind(slug).first();
+  ).bind(normalized).first();
   if (!org) return err('Hub not found', 404);
 
   const hub = await env.DB.prepare(
@@ -231,7 +235,7 @@ async function handleTrackEvent(slug, request, env) {
   const body = await request.json().catch(() => ({}));
   const org = await env.DB.prepare(
     'SELECT id FROM organizations WHERE slug = ?'
-  ).bind(slug).first();
+  ).bind((slug || '').toLowerCase()).first();
   if (!org) return err('Hub not found', 404);
 
   await env.DB.prepare(
@@ -255,9 +259,10 @@ async function handleTrackEvent(slug, request, env) {
 }
 
 async function handleAttributionRedirect(slug, campaignId, url, env) {
+  const normalized = (slug || '').toLowerCase();
   const org = await env.DB.prepare(
     'SELECT id FROM organizations WHERE slug = ?'
-  ).bind(slug).first();
+  ).bind(normalized).first();
   if (!org) return err('Hub not found', 404);
 
   const campaign = await env.DB.prepare(
@@ -271,7 +276,7 @@ async function handleAttributionRedirect(slug, campaignId, url, env) {
      VALUES (?,?,?,?,?)`
   ).bind(uuid(), org.id, campaignId, 'click', now()).run();
 
-  const dest = `https://www.givesendgo.com/${campaign.gsg_campaign_id}?ref=${slug}`;
+  const dest = `https://www.givesendgo.com/${campaign.gsg_campaign_id}?ref=${normalized}`;
   return Response.redirect(dest, 302);
 }
 
