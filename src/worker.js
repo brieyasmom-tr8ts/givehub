@@ -248,18 +248,43 @@ async function handleSignup(request, env) {
 }
 
 async function handleLogin(request, env) {
-  const { email, password } = await request.json();
-  const user = await env.DB.prepare(
-    'SELECT id, org_id, password_hash, role FROM hub_users WHERE email = ?'
-  ).bind(email || '').first();
-  if (!user) return err('Invalid credentials', 401);
-  const ok = await verifyPassword(password || '', user.password_hash);
+  const body = await request.json();
+  const email = body.email || '';
+  const password = body.password || '';
+  const slug = (body.slug || '').toLowerCase().trim();
+
+  // Find all users matching this email
+  const users = await env.DB.prepare(
+    `SELECT hu.id, hu.org_id, hu.password_hash, hu.role, o.slug, o.name
+     FROM hub_users hu
+     JOIN organizations o ON hu.org_id = o.id
+     WHERE hu.email = ?`
+  ).bind(email).all();
+  const matches = users.results || [];
+  if (!matches.length) return err('Invalid credentials', 401);
+
+  // If slug provided, filter to that org. Otherwise, if multiple, ask user to pick.
+  let user;
+  if (slug) {
+    user = matches.find(u => u.slug === slug);
+    if (!user) return err('Invalid credentials', 401);
+  } else if (matches.length === 1) {
+    user = matches[0];
+  } else {
+    return json({
+      multi_org: true,
+      orgs: matches.map(u => ({ slug: u.slug, name: u.name })),
+    }, 200);
+  }
+
+  const ok = await verifyPassword(password, user.password_hash);
   if (!ok) return err('Invalid credentials', 401);
+
   const token = await signJWT(
     { sub: user.id, org_id: user.org_id, role: user.role, iat: now() },
     env.JWT_SECRET
   );
-  return json({ token, org_id: user.org_id });
+  return json({ token, org_id: user.org_id, slug: user.slug });
 }
 
 async function handlePublicHub(slug, env) {

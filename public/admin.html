@@ -42,6 +42,11 @@
     <input id="li-email" type="email" />
     <label>Password</label>
     <input id="li-password" type="password" />
+    <div id="li-org-wrap" class="hidden">
+      <label>Organization</label>
+      <select id="li-slug"></select>
+      <p style="font-size:12px; color:#6b7280; margin:4px 0 0;">You have multiple hubs. Pick which one to log into.</p>
+    </div>
     <div style="margin-top:16px; display:flex; gap:8px;">
       <button onclick="login()">Log in</button>
       <button class="ghost" onclick="showSignup()">Sign up</button>
@@ -72,6 +77,7 @@
       <a href="#dashboard" class="active" onclick="show('dashboard')">📊 Dashboard</a>
       <a href="#hub" onclick="show('hub')">🎨 Hub Builder</a>
       <a href="#campaigns" onclick="show('campaigns')">💝 Campaigns</a>
+      <a id="view-hub-link" href="#" target="_blank" rel="noopener">🔗 View live hub</a>
       <a href="#" onclick="logout()">🚪 Log out</a>
     </aside>
     <main>
@@ -164,15 +170,28 @@
 
     async function login() {
       try {
+        const payload = {
+          email: document.getElementById('li-email').value,
+          password: document.getElementById('li-password').value,
+        };
+        const slugSelect = document.getElementById('li-slug');
+        if (!document.getElementById('li-org-wrap').classList.contains('hidden') && slugSelect.value) {
+          payload.slug = slugSelect.value;
+        }
         const d = await api('/api/auth/login', {
           method: 'POST',
-          body: JSON.stringify({
-            email: document.getElementById('li-email').value,
-            password: document.getElementById('li-password').value,
-          }),
+          body: JSON.stringify(payload),
         });
+        if (d.multi_org) {
+          // Show org selector
+          const wrap = document.getElementById('li-org-wrap');
+          slugSelect.innerHTML = d.orgs.map(o => `<option value="${o.slug}">${o.name} (${o.slug})</option>`).join('');
+          wrap.classList.remove('hidden');
+          return;
+        }
         token = d.token;
         localStorage.setItem('gh-token', token);
+        localStorage.setItem('gh-slug', d.slug || '');
         init();
       } catch (e) { alert(e.error || 'Login failed'); }
     }
@@ -190,6 +209,7 @@
         });
         token = d.token;
         localStorage.setItem('gh-token', token);
+        localStorage.setItem('gh-slug', d.slug || '');
         init();
       } catch (e) { alert(e.error || 'Signup failed'); }
     }
@@ -311,6 +331,10 @@
       document.getElementById('login').classList.add('hidden');
       document.getElementById('signup').classList.add('hidden');
       document.getElementById('dash').classList.remove('hidden');
+      const slug = localStorage.getItem('gh-slug') || '';
+      const viewLink = document.getElementById('view-hub-link');
+      if (slug) viewLink.href = '/' + slug;
+      else viewLink.style.display = 'none';
       loadStats();
     }
 
