@@ -1,0 +1,4 @@
+/           /index.html  200
+/admin.html /admin.html  200
+/hub.html   /hub.html    200
+/*          /hub.html    200

@@ -3,108 +3,335 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>GiveHub</title>
+  <title>GiveHub — Fundraising hubs for nonprofits</title>
+  <meta name="description" content="GiveHub lets nonprofits curate and promote multiple GiveSendGo campaigns on one branded landing page. Like Squarespace, built for fundraising." />
   <style>
-    :root { --primary: #1a73e8; --secondary: #34a853; --bg: #f7f8fa; --text: #1a202c; }
+    :root {
+      --primary: #1a73e8;
+      --primary-dark: #1557b0;
+      --secondary: #34a853;
+      --text: #0f172a;
+      --muted: #64748b;
+      --bg: #ffffff;
+      --bg-soft: #f8fafc;
+      --border: #e2e8f0;
+    }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); }
-    header { background: #fff; padding: 16px 24px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 12px; }
-    header img { height: 36px; }
-    header h1 { font-size: 18px; margin: 0; }
-    .hero { padding: 64px 24px; text-align: center; background: linear-gradient(135deg, var(--primary), var(--secondary)); color: #fff; }
-    .hero h2 { font-size: 40px; margin: 0 0 12px; }
-    .hero p { font-size: 18px; opacity: 0.9; }
-    main { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
-    section h3 { font-size: 22px; margin: 32px 0 16px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
-    .card { background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.08); display: flex; flex-direction: column; }
-    .card img { width: 100%; height: 160px; object-fit: cover; background: #eee; }
-    .card-body { padding: 16px; flex: 1; display: flex; flex-direction: column; }
-    .card h4 { margin: 0 0 8px; font-size: 16px; }
-    .card p { font-size: 13px; color: #6b7280; flex: 1; }
-    .bar { height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; margin: 12px 0 8px; }
-    .bar > div { height: 100%; background: var(--primary); }
-    .stats { font-size: 12px; color: #6b7280; display: flex; justify-content: space-between; margin-bottom: 12px; }
-    .btn { display: inline-block; padding: 10px 16px; background: var(--primary); color: #fff; text-decoration: none; border-radius: 6px; text-align: center; font-weight: 600; }
-    .loading { text-align: center; padding: 60px; color: #6b7280; }
-    footer { text-align: center; padding: 32px; color: #9ca3af; font-size: 13px; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--primary); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Nav */
+    nav {
+      position: sticky; top: 0; z-index: 10;
+      background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo {
+      font-size: 20px; font-weight: 700; color: var(--text);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .logo span { color: var(--primary); }
+    nav .links { display: flex; gap: 24px; align-items: center; }
+    nav .links a { color: var(--muted); font-size: 14px; font-weight: 500; }
+    nav .links a:hover { color: var(--text); text-decoration: none; }
+
+    .btn {
+      display: inline-block;
+      padding: 12px 22px;
+      background: var(--primary);
+      color: #fff;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 15px;
+      transition: background 0.15s;
+      border: 0;
+      cursor: pointer;
+    }
+    .btn:hover { background: var(--primary-dark); text-decoration: none; color: #fff; }
+    .btn.ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn.ghost:hover { background: var(--bg-soft); color: var(--text); }
+    .btn.lg { padding: 16px 32px; font-size: 17px; }
+
+    /* Hero */
+    .hero {
+      padding: 100px 32px 80px;
+      text-align: center;
+      background: linear-gradient(180deg, #fff 0%, var(--bg-soft) 100%);
+    }
+    .hero-inner { max-width: 820px; margin: 0 auto; }
+    .badge {
+      display: inline-block;
+      background: #e0edff;
+      color: var(--primary-dark);
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 24px;
+    }
+    .hero h1 {
+      font-size: 56px;
+      line-height: 1.1;
+      font-weight: 800;
+      margin: 0 0 24px;
+      letter-spacing: -0.02em;
+    }
+    .hero h1 .accent {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero p.sub {
+      font-size: 20px;
+      color: var(--muted);
+      margin: 0 0 40px;
+    }
+    .hero .cta-row {
+      display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+    }
+    .hero .micro {
+      margin-top: 24px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    /* Section */
+    section { padding: 80px 32px; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    .eyebrow {
+      text-transform: uppercase;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--primary);
+      letter-spacing: 0.08em;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    h2 {
+      font-size: 38px;
+      font-weight: 700;
+      text-align: center;
+      margin: 0 0 16px;
+      letter-spacing: -0.01em;
+    }
+    .section-sub {
+      text-align: center;
+      color: var(--muted);
+      font-size: 18px;
+      max-width: 640px;
+      margin: 0 auto 56px;
+    }
+
+    /* Features */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 28px;
+    }
+    .feature {
+      background: var(--bg-soft);
+      padding: 32px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+    }
+    .feature-icon {
+      width: 48px; height: 48px;
+      background: #e0edff;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+    .feature h3 { font-size: 19px; margin: 0 0 10px; font-weight: 700; }
+    .feature p { color: var(--muted); font-size: 15px; margin: 0; }
+
+    /* How it works */
+    .how { background: var(--bg-soft); }
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+    }
+    .step {
+      text-align: center;
+      padding: 24px;
+    }
+    .step-num {
+      width: 44px; height: 44px;
+      background: var(--primary);
+      color: #fff;
+      border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 18px;
+      margin-bottom: 16px;
+    }
+    .step h4 { font-size: 18px; margin: 0 0 8px; font-weight: 700; }
+    .step p { color: var(--muted); font-size: 14px; margin: 0; }
+
+    /* CTA */
+    .cta-section {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: #fff;
+      text-align: center;
+      padding: 80px 32px;
+    }
+    .cta-section h2 { color: #fff; }
+    .cta-section p { color: rgba(255,255,255,0.9); font-size: 18px; margin: 0 0 32px; }
+    .cta-section .btn {
+      background: #fff;
+      color: var(--primary);
+    }
+    .cta-section .btn:hover { background: #f1f5f9; color: var(--primary-dark); }
+
+    /* Footer */
+    footer {
+      padding: 48px 32px 32px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      border-top: 1px solid var(--border);
+    }
+    footer a { color: var(--muted); margin: 0 12px; }
+
+    @media (max-width: 720px) {
+      .hero { padding: 60px 20px 50px; }
+      .hero h1 { font-size: 38px; }
+      .hero p.sub { font-size: 17px; }
+      h2 { font-size: 28px; }
+      .features, .steps { grid-template-columns: 1fr; }
+      section { padding: 56px 20px; }
+      nav { padding: 14px 20px; }
+      nav .links a:not(.btn) { display: none; }
+    }
   </style>
 </head>
 <body>
-  <div id="app" class="loading">Loading…</div>
 
-  <script>
-    const API = location.hostname === 'localhost'
-      ? 'http://localhost:8787'
-      : 'https://givehub.brieyasmom.workers.dev';
+  <nav>
+    <div class="logo">Give<span>Hub</span></div>
+    <div class="links">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="/admin.html">Log in</a>
+      <a href="/admin.html" class="btn">Get started</a>
+    </div>
+  </nav>
 
-    const slug = location.pathname.split('/').filter(Boolean)[0] || 'demo';
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-inner">
+      <div class="badge">🚀 Built on GiveSendGo</div>
+      <h1>Turn your nonprofit into a <span class="accent">fundraising hub</span></h1>
+      <p class="sub">Curate multiple GiveSendGo campaigns on one beautiful, branded landing page. Track donations, measure impact, and grow your reach — no code required.</p>
+      <div class="cta-row">
+        <a href="/admin.html" class="btn lg">Create your hub — free</a>
+        <a href="#how" class="btn lg ghost">See how it works</a>
+      </div>
+      <p class="micro">Free forever · No credit card required · Set up in minutes</p>
+    </div>
+  </div>
 
-    function money(cents) {
-      return '$' + ((cents || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 0 });
-    }
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="container">
+      <div class="eyebrow">Features</div>
+      <h2>Everything your nonprofit needs</h2>
+      <p class="section-sub">A complete fundraising hub that works alongside your GiveSendGo campaigns.</p>
 
-    function card(c, slug) {
-      const pct = c.goal_amount ? Math.min(100, Math.round((c.raised_amount / c.goal_amount) * 100)) : 0;
-      return `
-        <div class="card">
-          ${c.image_url ? `<img src="${c.image_url}" alt="">` : `<img alt="">`}
-          <div class="card-body">
-            <h4>${c.title || ''}</h4>
-            <p>${(c.description || '').slice(0, 120)}</p>
-            <div class="bar"><div style="width:${pct}%"></div></div>
-            <div class="stats"><span>${money(c.raised_amount)}</span><span>${pct}%</span></div>
-            <a class="btn" href="${API}/r/${slug}/${c.id}">Donate</a>
-          </div>
-        </div>`;
-    }
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">🎨</div>
+          <h3>Branded landing page</h3>
+          <p>Customize your logo, colors, and messaging. Every hub looks like it was built just for you — because it was.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">💝</div>
+          <h3>Multi-campaign management</h3>
+          <p>Pull in and organize all your GiveSendGo campaigns. Feature the ones that matter most and group them by category.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">📊</div>
+          <h3>Unified analytics</h3>
+          <p>See total raised across every campaign, track traffic sources, and understand which pages drive the most donations.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🔗</div>
+          <h3>Donations flow to GSG</h3>
+          <p>Every donation goes directly to your GiveSendGo campaigns. We never touch the money — we just help you raise more.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">⚡</div>
+          <h3>No-code builder</h3>
+          <p>Set up your hub in minutes with a simple visual editor. No developers, no design skills, no headaches.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🌐</div>
+          <h3>Custom domain ready</h3>
+          <p>Launch on a free GiveHub URL or connect your own domain when you're ready to go pro.</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
-    async function load() {
-      try {
-        const r = await fetch(`${API}/api/hub/${slug}`);
-        if (!r.ok) throw new Error('not found');
-        const data = await r.json();
-        const hub = data.hub || {};
-        document.documentElement.style.setProperty('--primary', hub.primary_color || '#1a73e8');
-        document.documentElement.style.setProperty('--secondary', hub.secondary_color || '#34a853');
-        document.title = data.org.name;
+  <!-- HOW IT WORKS -->
+  <section id="how" class="how">
+    <div class="container">
+      <div class="eyebrow">How it works</div>
+      <h2>Launch in three steps</h2>
+      <p class="section-sub">From signup to live hub in under 10 minutes.</p>
 
-        const featured = data.campaigns.filter(c => c.is_featured);
-        const rest = data.campaigns.filter(c => !c.is_featured);
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h4>Create your hub</h4>
+          <p>Sign up free and claim your URL. Add your logo, pick your colors, and write a headline.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h4>Import campaigns</h4>
+          <p>Paste in any GiveSendGo campaign ID or URL. Organize them into categories, feature your top picks.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h4>Share & grow</h4>
+          <p>Share your hub link everywhere. Watch donations flow and track every click with built-in analytics.</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
-        document.getElementById('app').className = '';
-        document.getElementById('app').innerHTML = `
-          <header>
-            ${hub.logo_url ? `<img src="${hub.logo_url}" alt="">` : ''}
-            <h1>${data.org.name}</h1>
-          </header>
-          <div class="hero">
-            <h2>${hub.headline || data.org.name}</h2>
-            <p>${hub.tagline || ''}</p>
-          </div>
-          <main>
-            ${featured.length ? `<section><h3>⭐ Featured</h3><div class="grid">${featured.map(c => card(c, slug)).join('')}</div></section>` : ''}
-            ${rest.length ? `<section><h3>All Campaigns</h3><div class="grid">${rest.map(c => card(c, slug)).join('')}</div></section>` : ''}
-            ${!data.campaigns.length ? '<p style="text-align:center;color:#6b7280">No campaigns yet.</p>' : ''}
-          </main>
-          <footer>Powered by GiveHub</footer>`;
+  <!-- CTA -->
+  <div class="cta-section">
+    <h2>Ready to raise more?</h2>
+    <p>Create your free fundraising hub today. No credit card required.</p>
+    <a href="/admin.html" class="btn lg">Get started — it's free</a>
+  </div>
 
-        // Track page view
-        fetch(`${API}/api/hub/${slug}/track`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            event_type: 'view',
-            referrer_url: document.referrer,
-            session_id: crypto.randomUUID(),
-          }),
-        });
-      } catch (e) {
-        document.getElementById('app').innerHTML = '<p class="loading">Hub not found.</p>';
-      }
-    }
+  <!-- FOOTER -->
+  <footer>
+    <div>
+      <a href="/admin.html">Log in</a>
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+    </div>
+    <p style="margin-top: 20px;">© 2026 GiveHub · Built on GiveSendGo</p>
+  </footer>
 
-    load();
-  </script>
 </body>
 </html>
