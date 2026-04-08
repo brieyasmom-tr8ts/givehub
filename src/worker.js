@@ -132,27 +132,48 @@ async function verifyPassword(password, stored) {
 // ---------- GiveSendGo helpers ----------
 
 // Accepts either a full URL or a raw campaign slug, returns just the slug.
-// Examples:
-//   "https://www.givesendgo.com/TurnSeekGo"        → "TurnSeekGo"
-//   "https://givesendgo.com/TurnSeekGo?ref=foo"    → "TurnSeekGo"
-//   "TurnSeekGo"                                   → "TurnSeekGo"
-//   "12345"                                        → "12345"
 function parseGsgCampaignId(input) {
   const raw = String(input || '').trim();
   if (!raw) return '';
-  // Strip protocol and domain if present
   const match = raw.match(/^(?:https?:\/\/)?(?:www\.)?givesendgo\.com\/([^/?#]+)/i);
   if (match) return match[1];
-  // Otherwise treat the whole thing as a slug/id, strip any slashes or query
   return raw.replace(/^\/+|\/+$/g, '').split(/[?#/]/)[0];
 }
 
-// TODO: swap to real GSG API when credentials are available.
+function decodeHtmlEntities(s) {
+  if (!s) return s;
+  return s
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;/g, "'")
+    .replace(/&#x27;/gi, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)));
+}
+
+function extractMeta(html, property) {
+  // Handles both: <meta property="og:foo" content="..."> and <meta content="..." property="og:foo">
+  const patterns = [
+    new RegExp(`<meta[^>]+property=["']${property}["'][^>]+content=["']([^"']*)["']`, 'i'),
+    new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]+property=["']${property}["']`, 'i'),
+    new RegExp(`<meta[^>]+name=["']${property}["'][^>]+content=["']([^"']*)["']`, 'i'),
+  ];
+  for (const p of patterns) {
+    const m = html.match(p);
+    if (m) return decodeHtmlEntities(m[1]);
+  }
+  return null;
+}
+
+// Scrapes public GSG campaign page for title, image, description, goal, raised, donors.
+// Returns what it can find; falls back to placeholders for anything missing.
 async function fetchGsgCampaign(gsgCampaignId, env) {
   const id = parseGsgCampaignId(gsgCampaignId);
-  return {
+  const base = {
     gsg_campaign_id: id,
-    title: id,                        // display the slug as the title until we can fetch real data
+    title: id,
     description: 'Imported from GiveSendGo',
     image_url: null,
     goal_amount: 0,
@@ -160,6 +181,64 @@ async function fetchGsgCampaign(gsgCampaignId, env) {
     donor_count: 0,
     status: 'active',
   };
+  if (!id) return base;
+
+  try {
+    const res = await fetch(`https://www.givesendgo.com/${id}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; GiveHub/0.1; +https://givehub-bty.pages.dev)',
+        'Accept': 'text/html,application/xhtml+xml',
+      },
+      cf: { cacheTtl: 300, cacheEverything: true },
+    });
+    if (!res.ok) return base;
+    const html = await res.text();
+
+    const ogTitle = extractMeta(html, 'og:title');
+    if (ogTitle) base.title = ogTitle.replace(/\s*\|\s*GiveSendGo.*$/i, '').trim() || id;
+
+    const ogDesc = extractMeta(html, 'og:description');
+    if (ogDesc) base.description = ogDesc;
+
+    const ogImage = extractMeta(html, 'og:image');
+    if (ogImage) base.image_url = ogImage;
+
+    // Goal: look for "$X,XXX" following or preceding "goal"
+    const goalPatterns = [
+      /goal[^$]{0,60}\$\s*([0-9,]+(?:\.\d{1,2})?)/i,
+      /\$\s*([0-9,]+(?:\.\d{1,2})?)[^$]{0,30}goal/i,
+      /"goal(?:Amount)?"\s*:\s*"?([0-9.]+)"?/i,
+    ];
+    for (const p of goalPatterns) {
+      const m = html.match(p);
+      if (m) { base.goal_amount = Math.round(parseFloat(m[1].replace(/,/g, '')) * 100); break; }
+    }
+
+    // Raised: look for "$X,XXX" near "raised"
+    const raisedPatterns = [
+      /\$\s*([0-9,]+(?:\.\d{1,2})?)[^$]{0,30}raised/i,
+      /raised[^$]{0,60}\$\s*([0-9,]+(?:\.\d{1,2})?)/i,
+      /"(?:raised|totalRaised|amountRaised)"\s*:\s*"?([0-9.]+)"?/i,
+    ];
+    for (const p of raisedPatterns) {
+      const m = html.match(p);
+      if (m) { base.raised_amount = Math.round(parseFloat(m[1].replace(/,/g, '')) * 100); break; }
+    }
+
+    // Donor count
+    const donorPatterns = [
+      /([0-9,]+)\s*(?:donors?|supporters?|backers?|givers?|people\s+have\s+given)/i,
+      /"donor(?:Count|s)"\s*:\s*"?([0-9]+)"?/i,
+    ];
+    for (const p of donorPatterns) {
+      const m = html.match(p);
+      if (m) { base.donor_count = parseInt(m[1].replace(/,/g, ''), 10); break; }
+    }
+  } catch (_) {
+    // Network error — return base placeholder
+  }
+
+  return base;
 }
 
 // ---------- Route handlers ----------
@@ -383,6 +462,33 @@ async function handleDeleteCampaign(auth, id, env) {
   return json({ ok: true });
 }
 
+async function handleSyncCampaigns(auth, env) {
+  const rows = await env.DB.prepare(
+    'SELECT id, gsg_campaign_id FROM campaigns WHERE org_id = ?'
+  ).bind(auth.org_id).all();
+  const campaigns = rows.results || [];
+  const ts = now();
+  let updated = 0;
+  for (const c of campaigns) {
+    try {
+      const gsg = await fetchGsgCampaign(c.gsg_campaign_id, env);
+      await env.DB.prepare(
+        `UPDATE campaigns
+         SET title = ?, description = ?, image_url = ?,
+             goal_amount = ?, raised_amount = ?, donor_count = ?,
+             status = ?, last_synced_at = ?
+         WHERE id = ? AND org_id = ?`
+      ).bind(
+        gsg.title, gsg.description, gsg.image_url,
+        gsg.goal_amount, gsg.raised_amount, gsg.donor_count,
+        gsg.status, ts, c.id, auth.org_id
+      ).run();
+      updated++;
+    } catch (_) { /* skip and continue */ }
+  }
+  return json({ ok: true, updated, total: campaigns.length });
+}
+
 async function handleStatsOverview(auth, env) {
   const since = now() - 30 * 86400;
   const [totals, events, campaigns] = await Promise.allSettled([
@@ -482,6 +588,8 @@ export default {
         if (m === 'GET' && p === '/api/admin/campaigns') return handleListAdminCampaigns(auth, env);
         if (m === 'POST' && p === '/api/admin/campaigns/import')
           return handleImportCampaign(auth, request, env);
+        if (m === 'POST' && p === '/api/admin/campaigns/sync')
+          return handleSyncCampaigns(auth, env);
 
         match = p.match(/^\/api\/admin\/campaigns\/([^/]+)$/);
         if (m === 'PATCH' && match) return handlePatchCampaign(auth, match[1], request, env);

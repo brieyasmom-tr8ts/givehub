@@ -20,9 +20,14 @@
     .stat .l { font-size: 13px; color: #6b7280; }
     .panel { background: #fff; padding: 24px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.05); margin-bottom: 24px; }
     label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 4px; }
-    input, textarea, select { width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+    input, textarea, select { width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; font-family: inherit; }
+    input[type="color"] { width: 60px; height: 40px; padding: 4px; cursor: pointer; }
+    .color-row { display: flex; gap: 24px; flex-wrap: wrap; }
+    .color-row > div { flex: 0 0 auto; }
     button { background: #1a73e8; color: #fff; border: 0; padding: 10px 18px; border-radius: 6px; font-weight: 600; cursor: pointer; }
+    button:hover { background: #1557b0; }
     button.ghost { background: #e5e7eb; color: #1a202c; }
+    button.ghost:hover { background: #d1d5db; }
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
     .hidden { display: none; }
@@ -95,10 +100,16 @@
           <input id="h-tagline" />
           <label>Logo URL</label>
           <input id="h-logo" />
-          <label>Primary color</label>
-          <input id="h-primary" type="color" />
-          <label>Secondary color</label>
-          <input id="h-secondary" type="color" />
+          <div class="color-row" style="margin-top: 12px;">
+            <div>
+              <label>Primary color</label>
+              <input id="h-primary" type="color" />
+            </div>
+            <div>
+              <label>Secondary color</label>
+              <input id="h-secondary" type="color" />
+            </div>
+          </div>
           <label>About</label>
           <textarea id="h-about" rows="4"></textarea>
           <div style="margin-top:16px;">
@@ -113,10 +124,12 @@
         <div class="panel">
           <h3>Import from GiveSendGo</h3>
           <label>Campaign ID or URL</label>
-          <input id="imp-id" placeholder="12345" />
-          <div style="margin-top:12px;">
+          <input id="imp-id" placeholder="https://www.givesendgo.com/YourCampaign" />
+          <div style="margin-top:12px; display:flex; gap:8px;">
             <button onclick="importCampaign()">Import</button>
+            <button class="ghost" onclick="syncCampaigns()">🔄 Sync all from GSG</button>
           </div>
+          <p style="font-size:12px; color:#6b7280; margin-top:8px;">Sync re-fetches titles, images, goals, and raised amounts from GiveSendGo for all your campaigns.</p>
         </div>
         <div class="panel">
           <table>
@@ -253,14 +266,32 @@
 
     async function importCampaign() {
       const raw = document.getElementById('imp-id').value.trim();
-      const id = raw.match(/(\d+)/)?.[1] || raw;
-      if (!id) return;
-      await api('/api/admin/campaigns/import', {
-        method: 'POST',
-        body: JSON.stringify({ gsg_campaign_id: id }),
-      });
-      document.getElementById('imp-id').value = '';
-      loadCampaigns();
+      if (!raw) return;
+      try {
+        await api('/api/admin/campaigns/import', {
+          method: 'POST',
+          body: JSON.stringify({ gsg_campaign_id: raw }),
+        });
+        document.getElementById('imp-id').value = '';
+        loadCampaigns();
+      } catch (e) { alert(e.error || 'Import failed'); }
+    }
+
+    async function syncCampaigns() {
+      const btn = event.target;
+      const orig = btn.textContent;
+      btn.textContent = '⏳ Syncing...';
+      btn.disabled = true;
+      try {
+        const r = await api('/api/admin/campaigns/sync', { method: 'POST' });
+        alert(`Synced ${r.updated} of ${r.total} campaigns`);
+        loadCampaigns();
+      } catch (e) {
+        alert(e.error || 'Sync failed');
+      } finally {
+        btn.textContent = orig;
+        btn.disabled = false;
+      }
     }
 
     async function toggleFeatured(id, featured) {
