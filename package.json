@@ -1,0 +1,16 @@
+{
+  "name": "givehub",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-tenant nonprofit fundraising hub built on GiveSendGo",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:pages": "wrangler pages deploy public --project-name givehub",
+    "db:init": "wrangler d1 execute givehub-db --remote --file=./schema.sql",
+    "db:local": "wrangler d1 execute givehub-db --local --file=./schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}

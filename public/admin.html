@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GiveHub Admin</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, system-ui, sans-serif; background: #f7f8fa; color: #1a202c; }
+    .layout { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+    aside { background: #111827; color: #fff; padding: 24px 16px; }
+    aside h1 { font-size: 18px; margin: 0 0 24px; }
+    aside a { display: block; color: #cbd5e1; text-decoration: none; padding: 10px 12px; border-radius: 6px; font-size: 14px; }
+    aside a:hover, aside a.active { background: #1f2937; color: #fff; }
+    main { padding: 32px; }
+    h2 { margin: 0 0 24px; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+    .stat { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+    .stat .n { font-size: 28px; font-weight: 700; }
+    .stat .l { font-size: 13px; color: #6b7280; }
+    .panel { background: #fff; padding: 24px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.05); margin-bottom: 24px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 4px; }
+    input, textarea, select { width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+    button { background: #1a73e8; color: #fff; border: 0; padding: 10px 18px; border-radius: 6px; font-weight: 600; cursor: pointer; }
+    button.ghost { background: #e5e7eb; color: #1a202c; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+    .hidden { display: none; }
+    .login { max-width: 360px; margin: 80px auto; background: #fff; padding: 32px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+  </style>
+</head>
+<body>
+  <!-- LOGIN -->
+  <div id="login" class="login">
+    <h2>GiveHub Admin</h2>
+    <label>Email</label>
+    <input id="li-email" type="email" />
+    <label>Password</label>
+    <input id="li-password" type="password" />
+    <div style="margin-top:16px; display:flex; gap:8px;">
+      <button onclick="login()">Log in</button>
+      <button class="ghost" onclick="showSignup()">Sign up</button>
+    </div>
+  </div>
+
+  <!-- SIGNUP -->
+  <div id="signup" class="login hidden">
+    <h2>Create Hub</h2>
+    <label>Organization name</label>
+    <input id="su-name" />
+    <label>URL slug</label>
+    <input id="su-slug" placeholder="your-org" />
+    <label>Email</label>
+    <input id="su-email" type="email" />
+    <label>Password</label>
+    <input id="su-password" type="password" />
+    <div style="margin-top:16px; display:flex; gap:8px;">
+      <button onclick="signup()">Create</button>
+      <button class="ghost" onclick="showLogin()">Back</button>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dash" class="layout hidden">
+    <aside>
+      <h1>GiveHub</h1>
+      <a href="#dashboard" class="active" onclick="show('dashboard')">📊 Dashboard</a>
+      <a href="#hub" onclick="show('hub')">🎨 Hub Builder</a>
+      <a href="#campaigns" onclick="show('campaigns')">💝 Campaigns</a>
+      <a href="#" onclick="logout()">🚪 Log out</a>
+    </aside>
+    <main>
+      <!-- Dashboard -->
+      <div id="v-dashboard">
+        <h2>Dashboard</h2>
+        <div class="stats">
+          <div class="stat"><div class="n" id="s-raised">$0</div><div class="l">Total raised</div></div>
+          <div class="stat"><div class="n" id="s-donors">0</div><div class="l">Donors</div></div>
+          <div class="stat"><div class="n" id="s-campaigns">0</div><div class="l">Campaigns</div></div>
+          <div class="stat"><div class="n" id="s-views">0</div><div class="l">Views (30d)</div></div>
+        </div>
+        <div class="panel">
+          <h3>Top Campaigns</h3>
+          <table><tbody id="top-campaigns"></tbody></table>
+        </div>
+      </div>
+
+      <!-- Hub Builder -->
+      <div id="v-hub" class="hidden">
+        <h2>Hub Builder</h2>
+        <div class="panel">
+          <label>Headline</label>
+          <input id="h-headline" />
+          <label>Tagline</label>
+          <input id="h-tagline" />
+          <label>Logo URL</label>
+          <input id="h-logo" />
+          <label>Primary color</label>
+          <input id="h-primary" type="color" />
+          <label>Secondary color</label>
+          <input id="h-secondary" type="color" />
+          <label>About</label>
+          <textarea id="h-about" rows="4"></textarea>
+          <div style="margin-top:16px;">
+            <button onclick="saveHub()">Save</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Campaigns -->
+      <div id="v-campaigns" class="hidden">
+        <h2>Campaigns</h2>
+        <div class="panel">
+          <h3>Import from GiveSendGo</h3>
+          <label>Campaign ID or URL</label>
+          <input id="imp-id" placeholder="12345" />
+          <div style="margin-top:12px;">
+            <button onclick="importCampaign()">Import</button>
+          </div>
+        </div>
+        <div class="panel">
+          <table>
+            <thead><tr><th>Title</th><th>Raised</th><th>Featured</th><th></th></tr></thead>
+            <tbody id="campaigns-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API = location.hostname === 'localhost'
+      ? 'http://localhost:8787'
+      : 'https://givehub.YOUR-SUBDOMAIN.workers.dev';
+
+    let token = localStorage.getItem('gh-token');
+
+    function api(path, opts = {}) {
+      return fetch(API + path, {
+        ...opts,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: 'Bearer ' + token } : {}),
+          ...(opts.headers || {}),
+        },
+      }).then(r => r.json().then(d => r.ok ? d : Promise.reject(d)));
+    }
+
+    function showLogin() { document.getElementById('login').classList.remove('hidden'); document.getElementById('signup').classList.add('hidden'); }
+    function showSignup() { document.getElementById('signup').classList.remove('hidden'); document.getElementById('login').classList.add('hidden'); }
+
+    async function login() {
+      try {
+        const d = await api('/api/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({
+            email: document.getElementById('li-email').value,
+            password: document.getElementById('li-password').value,
+          }),
+        });
+        token = d.token;
+        localStorage.setItem('gh-token', token);
+        init();
+      } catch (e) { alert(e.error || 'Login failed'); }
+    }
+
+    async function signup() {
+      try {
+        const d = await api('/api/auth/signup', {
+          method: 'POST',
+          body: JSON.stringify({
+            org_name: document.getElementById('su-name').value,
+            slug: document.getElementById('su-slug').value,
+            email: document.getElementById('su-email').value,
+            password: document.getElementById('su-password').value,
+          }),
+        });
+        token = d.token;
+        localStorage.setItem('gh-token', token);
+        init();
+      } catch (e) { alert(e.error || 'Signup failed'); }
+    }
+
+    function logout() {
+      localStorage.removeItem('gh-token');
+      token = null;
+      document.getElementById('dash').classList.add('hidden');
+      showLogin();
+    }
+
+    function show(view) {
+      ['dashboard', 'hub', 'campaigns'].forEach(v => {
+        document.getElementById('v-' + v).classList.toggle('hidden', v !== view);
+      });
+      document.querySelectorAll('aside a').forEach(a => a.classList.remove('active'));
+      event?.target?.classList.add('active');
+      if (view === 'hub') loadHub();
+      if (view === 'campaigns') loadCampaigns();
+      if (view === 'dashboard') loadStats();
+    }
+
+    async function loadStats() {
+      const d = await api('/api/admin/stats/overview');
+      const t = d.totals || {};
+      document.getElementById('s-raised').textContent = '$' + ((t.total_raised || 0) / 100).toLocaleString();
+      document.getElementById('s-donors').textContent = t.total_donors || 0;
+      document.getElementById('s-campaigns').textContent = t.campaign_count || 0;
+      const views = (d.events_30d || []).find(e => e.event_type === 'view')?.n || 0;
+      document.getElementById('s-views').textContent = views;
+      document.getElementById('top-campaigns').innerHTML = (d.top_campaigns || [])
+        .map(c => `<tr><td>${c.title || '—'}</td><td>$${((c.raised_amount || 0) / 100).toLocaleString()}</td></tr>`)
+        .join('') || '<tr><td colspan="2" style="color:#6b7280">No campaigns yet</td></tr>';
+    }
+
+    async function loadHub() {
+      const d = await api('/api/admin/hub');
+      const h = d.hub || {};
+      document.getElementById('h-headline').value = h.headline || '';
+      document.getElementById('h-tagline').value = h.tagline || '';
+      document.getElementById('h-logo').value = h.logo_url || '';
+      document.getElementById('h-primary').value = h.primary_color || '#1a73e8';
+      document.getElementById('h-secondary').value = h.secondary_color || '#34a853';
+      document.getElementById('h-about').value = h.about_html || '';
+    }
+
+    async function saveHub() {
+      await api('/api/admin/hub', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          headline: document.getElementById('h-headline').value,
+          tagline: document.getElementById('h-tagline').value,
+          logo_url: document.getElementById('h-logo').value,
+          primary_color: document.getElementById('h-primary').value,
+          secondary_color: document.getElementById('h-secondary').value,
+          about_html: document.getElementById('h-about').value,
+        }),
+      });
+      alert('Saved');
+    }
+
+    async function loadCampaigns() {
+      const d = await api('/api/admin/campaigns');
+      document.getElementById('campaigns-table').innerHTML = (d.campaigns || [])
+        .map(c => `
+          <tr>
+            <td>${c.title || '—'}</td>
+            <td>$${((c.raised_amount || 0) / 100).toLocaleString()}</td>
+            <td><input type="checkbox" ${c.is_featured ? 'checked' : ''} onchange="toggleFeatured('${c.id}', this.checked)"></td>
+            <td><button class="ghost" onclick="deleteCampaign('${c.id}')">Remove</button></td>
+          </tr>`)
+        .join('') || '<tr><td colspan="4" style="color:#6b7280">No campaigns yet</td></tr>';
+    }
+
+    async function importCampaign() {
+      const raw = document.getElementById('imp-id').value.trim();
+      const id = raw.match(/(\d+)/)?.[1] || raw;
+      if (!id) return;
+      await api('/api/admin/campaigns/import', {
+        method: 'POST',
+        body: JSON.stringify({ gsg_campaign_id: id }),
+      });
+      document.getElementById('imp-id').value = '';
+      loadCampaigns();
+    }
+
+    async function toggleFeatured(id, featured) {
+      await api('/api/admin/campaigns/' + id, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_featured: featured ? 1 : 0 }),
+      });
+    }
+
+    async function deleteCampaign(id) {
+      if (!confirm('Remove campaign from hub?')) return;
+      await api('/api/admin/campaigns/' + id, { method: 'DELETE' });
+      loadCampaigns();
+    }
+
+    function init() {
+      document.getElementById('login').classList.add('hidden');
+      document.getElementById('signup').classList.add('hidden');
+      document.getElementById('dash').classList.remove('hidden');
+      loadStats();
+    }
+
+    if (token) init();
+  </script>
+</body>
+</html>
