@@ -140,35 +140,30 @@ function parseGsgCampaignId(input) {
   return raw.replace(/^\/+|\/+$/g, '').split(/[?#/]/)[0];
 }
 
-function decodeHtmlEntities(s) {
-  if (!s) return s;
-  return s
+// Strip HTML tags from description text
+function stripHtml(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#0?39;/g, "'")
-    .replace(/&#x27;/gi, "'")
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)));
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-function extractMeta(html, property) {
-  // Handles both: <meta property="og:foo" content="..."> and <meta content="..." property="og:foo">
-  const patterns = [
-    new RegExp(`<meta[^>]+property=["']${property}["'][^>]+content=["']([^"']*)["']`, 'i'),
-    new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]+property=["']${property}["']`, 'i'),
-    new RegExp(`<meta[^>]+name=["']${property}["'][^>]+content=["']([^"']*)["']`, 'i'),
-  ];
-  for (const p of patterns) {
-    const m = html.match(p);
-    if (m) return decodeHtmlEntities(m[1]);
-  }
-  return null;
+function toCents(val) {
+  if (val == null) return 0;
+  const n = parseFloat(String(val).replace(/[$,]/g, ''));
+  if (isNaN(n)) return 0;
+  return Math.round(n * 100);
 }
 
-// Scrapes public GSG campaign page for title, image, description, goal, raised, donors.
-// Returns what it can find; falls back to placeholders for anything missing.
+// Fetches a GSG campaign from their public JSON API.
+//   https://www.givesendgo.com/api/v2/campaigns/{slug}
 async function fetchGsgCampaign(gsgCampaignId, env) {
   const id = parseGsgCampaignId(gsgCampaignId);
   const base = {
@@ -184,58 +179,29 @@ async function fetchGsgCampaign(gsgCampaignId, env) {
   if (!id) return base;
 
   try {
-    const res = await fetch(`https://www.givesendgo.com/${id}`, {
+    const res = await fetch(`https://www.givesendgo.com/api/v2/campaigns/${encodeURIComponent(id)}`, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; GiveHub/0.1; +https://givehub-bty.pages.dev)',
-        'Accept': 'text/html,application/xhtml+xml',
+        'User-Agent': 'Mozilla/5.0 (compatible; GiveHub/0.1)',
+        'Accept': 'application/json',
       },
       cf: { cacheTtl: 300, cacheEverything: true },
     });
     if (!res.ok) return base;
-    const html = await res.text();
+    const data = await res.json();
 
-    const ogTitle = extractMeta(html, 'og:title');
-    if (ogTitle) base.title = ogTitle.replace(/\s*\|\s*GiveSendGo.*$/i, '').trim() || id;
-
-    const ogDesc = extractMeta(html, 'og:description');
-    if (ogDesc) base.description = ogDesc;
-
-    const ogImage = extractMeta(html, 'og:image');
-    if (ogImage) base.image_url = ogImage;
-
-    // Goal: look for "$X,XXX" following or preceding "goal"
-    const goalPatterns = [
-      /goal[^$]{0,60}\$\s*([0-9,]+(?:\.\d{1,2})?)/i,
-      /\$\s*([0-9,]+(?:\.\d{1,2})?)[^$]{0,30}goal/i,
-      /"goal(?:Amount)?"\s*:\s*"?([0-9.]+)"?/i,
-    ];
-    for (const p of goalPatterns) {
-      const m = html.match(p);
-      if (m) { base.goal_amount = Math.round(parseFloat(m[1].replace(/,/g, '')) * 100); break; }
+    if (data.campaign_name) base.title = data.campaign_name;
+    if (data.plain_description) {
+      base.description = data.plain_description.slice(0, 500);
+    } else if (data.campaign_description) {
+      base.description = stripHtml(data.campaign_description).slice(0, 500);
     }
-
-    // Raised: look for "$X,XXX" near "raised"
-    const raisedPatterns = [
-      /\$\s*([0-9,]+(?:\.\d{1,2})?)[^$]{0,30}raised/i,
-      /raised[^$]{0,60}\$\s*([0-9,]+(?:\.\d{1,2})?)/i,
-      /"(?:raised|totalRaised|amountRaised)"\s*:\s*"?([0-9.]+)"?/i,
-    ];
-    for (const p of raisedPatterns) {
-      const m = html.match(p);
-      if (m) { base.raised_amount = Math.round(parseFloat(m[1].replace(/,/g, '')) * 100); break; }
-    }
-
-    // Donor count
-    const donorPatterns = [
-      /([0-9,]+)\s*(?:donors?|supporters?|backers?|givers?|people\s+have\s+given)/i,
-      /"donor(?:Count|s)"\s*:\s*"?([0-9]+)"?/i,
-    ];
-    for (const p of donorPatterns) {
-      const m = html.match(p);
-      if (m) { base.donor_count = parseInt(m[1].replace(/,/g, ''), 10); break; }
-    }
+    if (data.campaign_header_image) base.image_url = data.campaign_header_image;
+    if (data.campaign_goal_amount != null) base.goal_amount = toCents(data.campaign_goal_amount);
+    // campaign_total_amount is the real raised amount; campaign_raised_value is unused
+    if (data.campaign_total_amount != null) base.raised_amount = toCents(data.campaign_total_amount);
+    if (data.is_published === 0 || data.campaign_enabled === 0) base.status = 'inactive';
   } catch (_) {
-    // Network error — return base placeholder
+    // Network / parse error — return base placeholder
   }
 
   return base;
