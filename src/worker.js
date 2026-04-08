@@ -1,5 +1,6 @@
 // GiveHub — Cloudflare Worker API
 // Multi-tenant fundraising hub built on GiveSendGo
+// v0.1.1 — auto-deploy via GitHub Actions
 //
 // Routes:
 //   GET  /api/hub/:slug                public hub config + campaigns
