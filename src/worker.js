@@ -129,14 +129,30 @@ async function verifyPassword(password, stored) {
   return newHash === hashB64;
 }
 
-// ---------- GiveSendGo API stub ----------
-// Replace with real GSG API calls when you have credentials.
+// ---------- GiveSendGo helpers ----------
+
+// Accepts either a full URL or a raw campaign slug, returns just the slug.
+// Examples:
+//   "https://www.givesendgo.com/TurnSeekGo"        → "TurnSeekGo"
+//   "https://givesendgo.com/TurnSeekGo?ref=foo"    → "TurnSeekGo"
+//   "TurnSeekGo"                                   → "TurnSeekGo"
+//   "12345"                                        → "12345"
+function parseGsgCampaignId(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return '';
+  // Strip protocol and domain if present
+  const match = raw.match(/^(?:https?:\/\/)?(?:www\.)?givesendgo\.com\/([^/?#]+)/i);
+  if (match) return match[1];
+  // Otherwise treat the whole thing as a slug/id, strip any slashes or query
+  return raw.replace(/^\/+|\/+$/g, '').split(/[?#/]/)[0];
+}
+
+// TODO: swap to real GSG API when credentials are available.
 async function fetchGsgCampaign(gsgCampaignId, env) {
-  // TODO: call GSG API with env.GSG_API_KEY
-  // For MVP, return placeholder so import flow works end-to-end.
+  const id = parseGsgCampaignId(gsgCampaignId);
   return {
-    gsg_campaign_id: gsgCampaignId,
-    title: `Campaign ${gsgCampaignId}`,
+    gsg_campaign_id: id,
+    title: id,                        // display the slug as the title until we can fetch real data
     description: 'Imported from GiveSendGo',
     image_url: null,
     goal_amount: 0,
