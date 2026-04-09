@@ -99,13 +99,46 @@
       <!-- Hub Builder -->
       <div id="v-hub" class="hidden">
         <h2>Hub Builder</h2>
+
+        <!-- Theme Picker -->
         <div class="panel">
+          <h3 style="margin:0 0 16px;">Theme</h3>
+          <div id="theme-picker" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:8px;">
+            <div class="theme-opt" data-theme="classic" onclick="pickTheme('classic')" style="border:2px solid #d1d5db;border-radius:10px;padding:16px;cursor:pointer;text-align:center;transition:border-color .15s">
+              <div style="font-size:28px;margin-bottom:8px;">🎨</div>
+              <div style="font-weight:700;font-size:14px;">Classic</div>
+              <div style="font-size:12px;color:#6b7280;margin-top:4px;">Gradient hero, polished grid</div>
+            </div>
+            <div class="theme-opt" data-theme="magazine" onclick="pickTheme('magazine')" style="border:2px solid #d1d5db;border-radius:10px;padding:16px;cursor:pointer;text-align:center;transition:border-color .15s">
+              <div style="font-size:28px;margin-bottom:8px;">📰</div>
+              <div style="font-weight:700;font-size:14px;">Magazine</div>
+              <div style="font-size:12px;color:#6b7280;margin-top:4px;">Editorial, serif, split hero</div>
+            </div>
+            <div class="theme-opt" data-theme="bold" onclick="pickTheme('bold')" style="border:2px solid #d1d5db;border-radius:10px;padding:16px;cursor:pointer;text-align:center;transition:border-color .15s">
+              <div style="font-size:28px;margin-bottom:8px;">⚡</div>
+              <div style="font-weight:700;font-size:14px;">Bold</div>
+              <div style="font-size:12px;color:#6b7280;margin-top:4px;">Dark, full-bleed, dramatic</div>
+            </div>
+            <div class="theme-opt" data-theme="minimal" onclick="pickTheme('minimal')" style="border:2px solid #d1d5db;border-radius:10px;padding:16px;cursor:pointer;text-align:center;transition:border-color .15s">
+              <div style="font-size:28px;margin-bottom:8px;">✨</div>
+              <div style="font-weight:700;font-size:14px;">Minimal</div>
+              <div style="font-size:12px;color:#6b7280;margin-top:4px;">Clean, serif, whitespace</div>
+            </div>
+          </div>
+          <input type="hidden" id="h-theme" value="classic" />
+        </div>
+
+        <!-- Branding -->
+        <div class="panel">
+          <h3 style="margin:0 0 16px;">Branding</h3>
           <label>Headline</label>
           <input id="h-headline" />
           <label>Tagline</label>
           <input id="h-tagline" />
           <label>Logo URL</label>
           <input id="h-logo" />
+          <label>Hero Image URL</label>
+          <input id="h-hero" placeholder="https://..." />
           <div class="color-row" style="margin-top: 12px;">
             <div>
               <label>Primary color</label>
@@ -245,15 +278,25 @@
         .join('') || '<tr><td colspan="2" style="color:#6b7280">No campaigns yet</td></tr>';
     }
 
+    function pickTheme(name) {
+      document.getElementById('h-theme').value = name;
+      document.querySelectorAll('.theme-opt').forEach(el => {
+        el.style.borderColor = el.dataset.theme === name ? '#1a73e8' : '#d1d5db';
+        el.style.background = el.dataset.theme === name ? '#eff6ff' : '';
+      });
+    }
+
     async function loadHub() {
       const d = await api('/api/admin/hub');
       const h = d.hub || {};
       document.getElementById('h-headline').value = h.headline || '';
       document.getElementById('h-tagline').value = h.tagline || '';
       document.getElementById('h-logo').value = h.logo_url || '';
+      document.getElementById('h-hero').value = h.hero_image_url || '';
       document.getElementById('h-primary').value = h.primary_color || '#1a73e8';
       document.getElementById('h-secondary').value = h.secondary_color || '#34a853';
       document.getElementById('h-about').value = h.about_html || '';
+      pickTheme(h.theme || 'classic');
     }
 
     async function saveHub() {
@@ -263,9 +306,11 @@
           headline: document.getElementById('h-headline').value,
           tagline: document.getElementById('h-tagline').value,
           logo_url: document.getElementById('h-logo').value,
+          hero_image_url: document.getElementById('h-hero').value,
           primary_color: document.getElementById('h-primary').value,
           secondary_color: document.getElementById('h-secondary').value,
           about_html: document.getElementById('h-about').value,
+          theme: document.getElementById('h-theme').value,
         }),
       });
       alert('Saved');
