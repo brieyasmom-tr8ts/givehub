@@ -130,6 +130,38 @@
     .card .btn { text-align: center; }
     .loading { text-align: center; padding: 60px; color: var(--muted); }
     footer.hub { text-align: center; padding: 32px; color: #9ca3af; font-size: 13px; }
+
+    /* Fundraiser card chip */
+    .fr-card { background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 16px; }
+    .fr-card .who { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .fr-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--primary); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
+    .fr-card .name { font-weight: 600; font-size: 14px; }
+    .fr-card .sub { font-size: 12px; color: var(--muted); }
+    .fr-card p.story { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+
+    /* Fundraiser detail + create */
+    .fr-detail { max-width: 760px; margin: 0 auto; padding: 32px 24px; }
+    .fr-detail .hero-img { width: 100%; max-height: 360px; object-fit: cover; border-radius: 14px; margin-bottom: 24px; background: #eee; }
+    .fr-detail h1 { font-size: 32px; margin: 0 0 6px; letter-spacing: -0.01em; }
+    .fr-detail .byline { color: var(--muted); margin: 0 0 24px; font-size: 15px; }
+    .fr-detail .story { font-size: 16px; line-height: 1.7; white-space: pre-wrap; }
+    .fr-detail .panel { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 24px; margin: 24px 0; }
+    .fr-detail .big-raised { font-size: 32px; font-weight: 700; }
+    .fr-detail .big-goal { color: var(--muted); font-size: 14px; margin-bottom: 12px; }
+    .fr-detail .bar { margin: 0 0 12px; }
+    .fr-detail .row { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
+    .fr-detail .btn.block { display: block; width: 100%; text-align: center; margin-top: 16px; }
+
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
+    .modal { background: #fff; border-radius: 14px; padding: 28px; max-width: 520px; width: 100%; max-height: 90vh; overflow-y: auto; }
+    .modal h3 { margin: 0 0 6px; font-size: 22px; }
+    .modal .muted { color: var(--muted); font-size: 14px; margin: 0 0 18px; }
+    .modal label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 4px; }
+    .modal input, .modal textarea { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; }
+    .modal .actions { display: flex; gap: 8px; margin-top: 20px; }
+    .modal .actions button { flex: 1; padding: 12px; border: 0; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; }
+    .modal .actions .primary { background: var(--primary); color: #fff; }
+    .modal .actions .cancel { background: var(--bg-soft); color: var(--text); }
   </style>
 </head>
 <body>
@@ -141,7 +173,10 @@
       : 'https://givehub.brieyasmom.workers.dev';
 
     const path = location.pathname.replace(/\/$/, '');
-    const slug = path.split('/').filter(Boolean)[0];
+    const parts = path.split('/').filter(Boolean);
+    const slug = parts[0];
+    // /:slug/f/:fundraiserSlug
+    const fundraiserSlug = parts[1] === 'f' && parts[2] ? parts[2] : null;
 
     function esc(s) { return (s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
     function money(cents) { return '$' + ((cents || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 0 }); }
@@ -216,6 +251,9 @@
     /* ---------- Hub view ---------- */
     function card(c) {
       const pct = c.goal_amount ? Math.min(100, Math.round((c.raised_amount / c.goal_amount) * 100)) : 0;
+      const p2p = c.allow_p2p
+        ? `<button class="btn ghost" style="margin-top:8px;" onclick="openStartFundraiser('${esc(c.id)}', '${esc(c.title)}')">Start a fundraiser</button>`
+        : '';
       return `
         <div class="card">
           ${c.image_url ? `<img src="${esc(c.image_url)}" alt="">` : `<img alt="">`}
@@ -225,9 +263,30 @@
             <div class="bar"><div style="width:${pct}%"></div></div>
             <div class="stats-row"><span>${money(c.raised_amount)}</span><span>${pct}%</span></div>
             <a class="btn" href="${API}/r/${esc(slug)}/${esc(c.id)}">Donate</a>
+            ${p2p}
           </div>
         </div>`;
     }
+
+    function frChip(f) {
+      const pct = f.goal_amount ? Math.min(100, Math.round((f.raised_amount / f.goal_amount) * 100)) : 0;
+      const initial = (f.supporter_name || '?').trim()[0].toUpperCase();
+      return `
+        <a class="fr-card" href="/${esc(slug)}/f/${esc(f.slug)}" style="text-decoration:none;color:inherit;display:block;">
+          <div class="who">
+            <div class="fr-avatar">${esc(initial)}</div>
+            <div>
+              <div class="name">${esc(f.supporter_name)}</div>
+              <div class="sub">${money(f.raised_amount)} raised</div>
+            </div>
+          </div>
+          ${f.story ? `<p class="story">${esc(f.story.slice(0, 100))}</p>` : ''}
+          ${f.goal_amount ? `<div class="bar"><div style="width:${pct}%"></div></div>` : ''}
+        </a>`;
+    }
+
+    // Hub-scoped state used by the P2P create modal
+    let activeHub = null;
 
     async function renderHub() {
       document.getElementById('root').innerHTML = '<p class="loading">Loading…</p>';
@@ -235,6 +294,7 @@
         const r = await fetch(`${API}/api/hub/${encodeURIComponent(slug)}`);
         if (!r.ok) throw new Error('not found');
         const data = await r.json();
+        activeHub = data;
         const hub = data.hub || {};
         document.documentElement.style.setProperty('--primary', hub.primary_color || '#1a73e8');
         document.documentElement.style.setProperty('--secondary', hub.secondary_color || '#34a853');
@@ -242,6 +302,7 @@
 
         const featured = data.campaigns.filter(c => c.is_featured);
         const rest = data.campaigns.filter(c => !c.is_featured);
+        const frs = data.fundraisers || [];
 
         document.getElementById('root').innerHTML = `
           <header class="hub-header">
@@ -256,6 +317,7 @@
             ${featured.length ? `<section><h3>⭐ Featured</h3><div class="grid">${featured.map(card).join('')}</div></section>` : ''}
             ${rest.length ? `<section><h3>All Campaigns</h3><div class="grid">${rest.map(card).join('')}</div></section>` : ''}
             ${!data.campaigns.length ? '<p class="loading">No campaigns yet.</p>' : ''}
+            ${frs.length ? `<section><h3>🙌 Community Fundraisers</h3><div class="grid">${frs.map(frChip).join('')}</div></section>` : ''}
           </main>
           <footer class="hub">Powered by GiveHub</footer>`;
 
@@ -279,9 +341,106 @@
       }
     }
 
+    /* ---------- Fundraiser detail view ---------- */
+    async function renderFundraiser() {
+      document.getElementById('root').innerHTML = '<p class="loading">Loading…</p>';
+      try {
+        const r = await fetch(`${API}/api/hub/${encodeURIComponent(slug)}/f/${encodeURIComponent(fundraiserSlug)}`);
+        if (!r.ok) throw new Error('not found');
+        const data = await r.json();
+        const f = data.fundraiser;
+        const c = data.campaign || {};
+        const hub = data.hub || {};
+        document.documentElement.style.setProperty('--primary', hub.primary_color || '#1a73e8');
+        document.documentElement.style.setProperty('--secondary', hub.secondary_color || '#34a853');
+        document.title = f.supporter_name + ' — ' + data.org.name;
+
+        const pct = f.goal_amount ? Math.min(100, Math.round((f.raised_amount / f.goal_amount) * 100)) : 0;
+        const img = f.image_url || c.image_url;
+
+        document.getElementById('root').innerHTML = `
+          <header class="hub-header">
+            ${hub.logo_url ? `<img src="${esc(hub.logo_url)}" alt="">` : ''}
+            <h1><a href="/${esc(slug)}" style="color:inherit;text-decoration:none;">${esc(data.org.name)}</a></h1>
+          </header>
+          <div class="fr-detail">
+            ${img ? `<img class="hero-img" src="${esc(img)}" alt="">` : ''}
+            <h1>${esc(f.supporter_name)} is fundraising</h1>
+            <p class="byline">for <strong>${esc(c.title || '—')}</strong></p>
+            <div class="panel">
+              <div class="big-raised">${money(f.raised_amount)}</div>
+              <div class="big-goal">${f.goal_amount ? `raised of ${money(f.goal_amount)} goal` : 'raised so far'}</div>
+              ${f.goal_amount ? `<div class="bar"><div style="width:${pct}%"></div></div>` : ''}
+              <div class="row"><span>${f.donor_count || 0} donors</span>${f.goal_amount ? `<span>${pct}%</span>` : ''}</div>
+              <a class="btn block" href="${API}/r/${esc(slug)}/f/${esc(f.slug)}">Donate</a>
+            </div>
+            ${f.story ? `<h3 style="margin:24px 0 8px;">Story</h3><div class="story">${esc(f.story)}</div>` : ''}
+          </div>
+          <footer class="hub">Powered by GiveHub</footer>`;
+      } catch (e) {
+        document.getElementById('root').innerHTML = `
+          <div style="max-width:560px;margin:100px auto;text-align:center;padding:24px;">
+            <h1 style="font-size:32px;margin:0 0 12px;">Fundraiser not found</h1>
+            <a href="/${esc(slug)}" class="btn">Back to hub</a>
+          </div>`;
+      }
+    }
+
+    /* ---------- Start-a-fundraiser modal ---------- */
+    function openStartFundraiser(campaignId, campaignTitle) {
+      const wrap = document.createElement('div');
+      wrap.className = 'modal-backdrop';
+      wrap.innerHTML = `
+        <div class="modal">
+          <h3>Start a fundraiser</h3>
+          <p class="muted">Fundraise for <strong>${esc(campaignTitle)}</strong>. Donations go straight to the campaign on GiveSendGo.</p>
+          <label>Your name</label>
+          <input id="fr-name" />
+          <label>Email</label>
+          <input id="fr-email" type="email" />
+          <label>Your goal (USD, optional)</label>
+          <input id="fr-goal" type="number" min="0" />
+          <label>Your story</label>
+          <textarea id="fr-story" rows="4" placeholder="Why are you fundraising?"></textarea>
+          <div class="actions">
+            <button class="cancel" type="button">Cancel</button>
+            <button class="primary" type="button">Create</button>
+          </div>
+        </div>`;
+      document.body.appendChild(wrap);
+      const close = () => wrap.remove();
+      wrap.querySelector('.cancel').onclick = close;
+      wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
+      wrap.querySelector('.primary').onclick = async () => {
+        const name = wrap.querySelector('#fr-name').value.trim();
+        if (!name) return alert('Please enter your name');
+        try {
+          const r = await fetch(`${API}/api/hub/${encodeURIComponent(slug)}/fundraisers`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              campaign_id: campaignId,
+              supporter_name: name,
+              supporter_email: wrap.querySelector('#fr-email').value.trim() || null,
+              goal_amount: parseFloat(wrap.querySelector('#fr-goal').value) || 0,
+              story: wrap.querySelector('#fr-story').value.trim() || null,
+            }),
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || 'Failed');
+          close();
+          location.href = d.url;
+        } catch (e) {
+          alert(e.message || 'Failed to create fundraiser');
+        }
+      };
+    }
+
     /* ---------- Router ---------- */
     if (!slug) {
       renderMarketing();
+    } else if (fundraiserSlug) {
+      renderFundraiser();
     } else {
       renderHub();
     }

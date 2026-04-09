@@ -77,6 +77,7 @@
       <a href="#dashboard" class="active" onclick="show('dashboard')">📊 Dashboard</a>
       <a href="#hub" onclick="show('hub')">🎨 Hub Builder</a>
       <a href="#campaigns" onclick="show('campaigns')">💝 Campaigns</a>
+      <a href="#fundraisers" onclick="show('fundraisers')">🙌 Fundraisers</a>
       <a id="view-hub-link" href="#" target="_blank" rel="noopener">🔗 View live hub</a>
       <a href="#" onclick="logout()">🚪 Log out</a>
     </aside>
@@ -139,8 +140,21 @@
         </div>
         <div class="panel">
           <table>
-            <thead><tr><th>Title</th><th>Raised</th><th>Featured</th><th></th></tr></thead>
+            <thead><tr><th>Title</th><th>Raised</th><th>Featured</th><th>P2P</th><th></th></tr></thead>
             <tbody id="campaigns-table"></tbody>
+          </table>
+          <p style="font-size:12px; color:#6b7280; margin-top:8px;">Toggle <strong>P2P</strong> to let supporters create their own fundraising pages for a campaign.</p>
+        </div>
+      </div>
+
+      <!-- Fundraisers -->
+      <div id="v-fundraisers" class="hidden">
+        <h2>Peer-to-peer Fundraisers</h2>
+        <div class="panel">
+          <p style="margin:0 0 12px; color:#6b7280;">Supporters can create their own fundraising pages for any campaign you've marked as <strong>P2P</strong>. Donations attribute back to the campaign — and to them.</p>
+          <table>
+            <thead><tr><th>Name</th><th>Campaign</th><th>Raised</th><th>Goal</th><th>Status</th><th>Featured</th><th></th></tr></thead>
+            <tbody id="fundraisers-table"></tbody>
           </table>
         </div>
       </div>
@@ -222,13 +236,14 @@
     }
 
     function show(view) {
-      ['dashboard', 'hub', 'campaigns'].forEach(v => {
+      ['dashboard', 'hub', 'campaigns', 'fundraisers'].forEach(v => {
         document.getElementById('v-' + v).classList.toggle('hidden', v !== view);
       });
       document.querySelectorAll('aside a').forEach(a => a.classList.remove('active'));
       event?.target?.classList.add('active');
       if (view === 'hub') loadHub();
       if (view === 'campaigns') loadCampaigns();
+      if (view === 'fundraisers') loadFundraisers();
       if (view === 'dashboard') loadStats();
     }
 
@@ -279,9 +294,33 @@
             <td>${c.title || '—'}</td>
             <td>$${((c.raised_amount || 0) / 100).toLocaleString()}</td>
             <td><input type="checkbox" ${c.is_featured ? 'checked' : ''} onchange="toggleFeatured('${c.id}', this.checked)"></td>
+            <td><input type="checkbox" ${c.allow_p2p ? 'checked' : ''} onchange="toggleP2P('${c.id}', this.checked)"></td>
             <td><button class="ghost" onclick="deleteCampaign('${c.id}')">Remove</button></td>
           </tr>`)
-        .join('') || '<tr><td colspan="4" style="color:#6b7280">No campaigns yet</td></tr>';
+        .join('') || '<tr><td colspan="5" style="color:#6b7280">No campaigns yet</td></tr>';
+    }
+
+    async function loadFundraisers() {
+      const d = await api('/api/admin/fundraisers');
+      const slug = localStorage.getItem('gh-slug') || '';
+      document.getElementById('fundraisers-table').innerHTML = (d.fundraisers || [])
+        .map(f => `
+          <tr>
+            <td><a href="/${slug}/f/${f.slug}" target="_blank" rel="noopener">${f.supporter_name || '—'}</a></td>
+            <td>${f.campaign_title || '—'}</td>
+            <td>$${((f.raised_amount || 0) / 100).toLocaleString()}</td>
+            <td>${f.goal_amount ? '$' + ((f.goal_amount || 0) / 100).toLocaleString() : '—'}</td>
+            <td>
+              <select onchange="patchFundraiser('${f.id}', { status: this.value })">
+                <option value="active" ${f.status === 'active' ? 'selected' : ''}>Active</option>
+                <option value="pending" ${f.status === 'pending' ? 'selected' : ''}>Pending</option>
+                <option value="archived" ${f.status === 'archived' ? 'selected' : ''}>Archived</option>
+              </select>
+            </td>
+            <td><input type="checkbox" ${f.is_featured ? 'checked' : ''} onchange="patchFundraiser('${f.id}', { is_featured: this.checked ? 1 : 0 })"></td>
+            <td><button class="ghost" onclick="deleteFundraiser('${f.id}')">Remove</button></td>
+          </tr>`)
+        .join('') || '<tr><td colspan="7" style="color:#6b7280">No fundraisers yet. Enable P2P on a campaign so supporters can start their own pages.</td></tr>';
     }
 
     async function importCampaign() {
@@ -321,10 +360,30 @@
       });
     }
 
+    async function toggleP2P(id, allow) {
+      await api('/api/admin/campaigns/' + id, {
+        method: 'PATCH',
+        body: JSON.stringify({ allow_p2p: allow ? 1 : 0 }),
+      });
+    }
+
     async function deleteCampaign(id) {
       if (!confirm('Remove campaign from hub?')) return;
       await api('/api/admin/campaigns/' + id, { method: 'DELETE' });
       loadCampaigns();
+    }
+
+    async function patchFundraiser(id, patch) {
+      await api('/api/admin/fundraisers/' + id, {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      });
+    }
+
+    async function deleteFundraiser(id) {
+      if (!confirm('Remove this fundraiser?')) return;
+      await api('/api/admin/fundraisers/' + id, { method: 'DELETE' });
+      loadFundraisers();
     }
 
     function init() {

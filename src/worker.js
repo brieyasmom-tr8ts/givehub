@@ -1,22 +1,28 @@
 // GiveHub — Cloudflare Worker API
 // Multi-tenant fundraising hub built on GiveSendGo
-// v0.1.2 — auto-deploy via GitHub Actions
+// v0.2.0 — peer-to-peer fundraisers
 //
 // Routes:
-//   GET  /api/hub/:slug                public hub config + campaigns
-//   GET  /api/hub/:slug/campaigns      campaign list
-//   POST /api/hub/:slug/track          log view/click event
-//   GET  /r/:slug/:campaignId          attribution redirect to GSG
-//   POST /webhooks/gsg/donation        GSG donation webhook
-//   POST /api/auth/signup              create org + owner user
-//   POST /api/auth/login               → { token }
-//   GET  /api/admin/hub                (auth) current hub config
-//   PATCH /api/admin/hub               (auth) update hub
-//   GET  /api/admin/campaigns          (auth) list
-//   POST /api/admin/campaigns/import   (auth) import from GSG
-//   PATCH /api/admin/campaigns/:id     (auth) feature/category/sort
-//   DELETE /api/admin/campaigns/:id    (auth)
-//   GET  /api/admin/stats/overview     (auth)
+//   GET  /api/hub/:slug                      public hub config + campaigns
+//   GET  /api/hub/:slug/f/:fundraiserSlug    public fundraiser page
+//   POST /api/hub/:slug/fundraisers          public: create P2P fundraiser
+//   POST /api/hub/:slug/track                log view/click event
+//   GET  /r/:slug/:campaignId                attribution redirect to GSG
+//   GET  /r/:slug/f/:fundraiserSlug          P2P attribution redirect
+//   POST /webhooks/gsg/donation              GSG donation webhook
+//   POST /api/auth/signup                    create org + owner user
+//   POST /api/auth/login                     → { token }
+//   GET  /api/admin/hub                      (auth) current hub config
+//   PATCH /api/admin/hub                     (auth) update hub
+//   GET  /api/admin/campaigns                (auth) list
+//   POST /api/admin/campaigns/import         (auth) import from GSG
+//   POST /api/admin/campaigns/sync           (auth) resync all from GSG
+//   PATCH /api/admin/campaigns/:id           (auth) feature/category/sort/p2p
+//   DELETE /api/admin/campaigns/:id          (auth)
+//   GET  /api/admin/fundraisers              (auth) list P2P fundraisers
+//   PATCH /api/admin/fundraisers/:id         (auth) approve/feature/status
+//   DELETE /api/admin/fundraisers/:id        (auth)
+//   GET  /api/admin/stats/overview           (auth)
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -207,13 +213,22 @@ async function fetchGsgCampaign(gsgCampaignId, env) {
   return base;
 }
 
+// ---------- Slug helpers ----------
+function normalizeSlug(s) {
+  return String(s || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
 // ---------- Route handlers ----------
 
 async function handleSignup(request, env) {
   const body = await request.json();
   const { org_name, email, password } = body;
-  // Normalize slug: lowercase, strip invalid chars
-  const slug = (body.slug || '').toLowerCase().trim().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  const slug = normalizeSlug(body.slug);
   if (!org_name || !slug || !email || !password)
     return err('Missing required fields');
 
@@ -300,7 +315,8 @@ async function handlePublicHub(slug, env) {
 
   const campaigns = await env.DB.prepare(
     `SELECT id, gsg_campaign_id, title, description, image_url, goal_amount,
-            raised_amount, donor_count, category_id, is_featured, sort_order
+            raised_amount, donor_count, category_id, is_featured, sort_order,
+            allow_p2p
      FROM campaigns WHERE org_id = ? AND status = 'active'
      ORDER BY is_featured DESC, sort_order ASC`
   ).bind(org.id).all();
@@ -309,12 +325,104 @@ async function handlePublicHub(slug, env) {
     'SELECT * FROM categories WHERE org_id = ? ORDER BY sort_order ASC'
   ).bind(org.id).all();
 
+  const fundraisers = await env.DB.prepare(
+    `SELECT id, campaign_id, slug, supporter_name, story, image_url,
+            goal_amount, raised_amount, donor_count, is_featured
+     FROM fundraisers
+     WHERE org_id = ? AND status = 'active'
+     ORDER BY is_featured DESC, raised_amount DESC
+     LIMIT 24`
+  ).bind(org.id).all();
+
   return json({
     org: { slug: org.slug, name: org.name },
     hub,
     campaigns: campaigns.results || [],
     categories: categories.results || [],
+    fundraisers: fundraisers.results || [],
   });
+}
+
+async function handlePublicFundraiser(slug, frSlug, env) {
+  const orgSlug = (slug || '').toLowerCase();
+  const fSlug = (frSlug || '').toLowerCase();
+  const org = await env.DB.prepare(
+    'SELECT id, slug, name FROM organizations WHERE slug = ? AND status = "active"'
+  ).bind(orgSlug).first();
+  if (!org) return err('Hub not found', 404);
+
+  const hub = await env.DB.prepare(
+    'SELECT logo_url, primary_color, secondary_color FROM hubs WHERE org_id = ?'
+  ).bind(org.id).first();
+
+  const fr = await env.DB.prepare(
+    `SELECT id, campaign_id, slug, supporter_name, story, image_url,
+            goal_amount, raised_amount, donor_count, status, is_featured, created_at
+     FROM fundraisers WHERE org_id = ? AND slug = ?`
+  ).bind(org.id, fSlug).first();
+  if (!fr || fr.status !== 'active') return err('Fundraiser not found', 404);
+
+  const campaign = await env.DB.prepare(
+    `SELECT id, title, image_url, goal_amount, raised_amount, gsg_campaign_id
+     FROM campaigns WHERE id = ? AND org_id = ?`
+  ).bind(fr.campaign_id, org.id).first();
+
+  return json({
+    org: { slug: org.slug, name: org.name },
+    hub,
+    fundraiser: fr,
+    campaign,
+  });
+}
+
+async function handleCreateFundraiser(slug, request, env) {
+  const orgSlug = (slug || '').toLowerCase();
+  const body = await request.json().catch(() => ({}));
+  const org = await env.DB.prepare(
+    'SELECT id FROM organizations WHERE slug = ? AND status = "active"'
+  ).bind(orgSlug).first();
+  if (!org) return err('Hub not found', 404);
+
+  const { campaign_id, supporter_name, supporter_email, story, image_url, goal_amount } = body;
+  if (!campaign_id || !supporter_name)
+    return err('Missing campaign_id or supporter_name');
+
+  // Confirm the campaign allows P2P
+  const campaign = await env.DB.prepare(
+    'SELECT id, allow_p2p FROM campaigns WHERE id = ? AND org_id = ? AND status = "active"'
+  ).bind(campaign_id, org.id).first();
+  if (!campaign) return err('Campaign not found', 404);
+  if (!campaign.allow_p2p)
+    return err('This campaign does not accept peer-to-peer fundraisers', 403);
+
+  // Generate a unique slug from the supporter name
+  const base = normalizeSlug(supporter_name) || 'fundraiser';
+  let frSlug = base;
+  let attempt = 0;
+  while (attempt < 20) {
+    const exists = await env.DB.prepare(
+      'SELECT id FROM fundraisers WHERE org_id = ? AND slug = ?'
+    ).bind(org.id, frSlug).first();
+    if (!exists) break;
+    attempt += 1;
+    frSlug = `${base}-${attempt + 1}`;
+  }
+  if (attempt >= 20) return err('Could not generate a unique slug', 409);
+
+  const id = uuid();
+  const ts = now();
+  await env.DB.prepare(
+    `INSERT INTO fundraisers
+     (id, org_id, campaign_id, slug, supporter_name, supporter_email,
+      story, image_url, goal_amount, status, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(
+    id, org.id, campaign_id, frSlug, supporter_name,
+    supporter_email || null, story || null, image_url || null,
+    toCents(goal_amount || 0), 'active', ts, ts
+  ).run();
+
+  return json({ id, slug: frSlug, url: `/${orgSlug}/f/${frSlug}` }, 201);
 }
 
 async function handleTrackEvent(slug, request, env) {
@@ -363,6 +471,34 @@ async function handleAttributionRedirect(slug, campaignId, url, env) {
   ).bind(uuid(), org.id, campaignId, 'click', now()).run();
 
   const dest = `https://www.givesendgo.com/${campaign.gsg_campaign_id}?ref=${normalized}`;
+  return Response.redirect(dest, 302);
+}
+
+async function handleFundraiserRedirect(slug, frSlug, env) {
+  const orgSlug = (slug || '').toLowerCase();
+  const fSlug = (frSlug || '').toLowerCase();
+  const org = await env.DB.prepare(
+    'SELECT id FROM organizations WHERE slug = ?'
+  ).bind(orgSlug).first();
+  if (!org) return err('Hub not found', 404);
+
+  const row = await env.DB.prepare(
+    `SELECT f.id AS fundraiser_id, f.campaign_id, c.gsg_campaign_id
+     FROM fundraisers f
+     JOIN campaigns c ON c.id = f.campaign_id
+     WHERE f.org_id = ? AND f.slug = ? AND f.status = 'active'`
+  ).bind(org.id, fSlug).first();
+  if (!row) return err('Fundraiser not found', 404);
+
+  // Log click tied to both the fundraiser and underlying campaign
+  await env.DB.prepare(
+    `INSERT INTO referral_events
+     (id, org_id, campaign_id, fundraiser_id, event_type, created_at)
+     VALUES (?,?,?,?,?,?)`
+  ).bind(uuid(), org.id, row.campaign_id, row.fundraiser_id, 'click', now()).run();
+
+  // ref=<hub-slug>&fr=<fundraiser-slug> lets the GSG webhook credit both.
+  const dest = `https://www.givesendgo.com/${row.gsg_campaign_id}?ref=${orgSlug}&fr=${fSlug}`;
   return Response.redirect(dest, 302);
 }
 
@@ -429,7 +565,7 @@ async function handleImportCampaign(auth, request, env) {
 
 async function handlePatchCampaign(auth, id, request, env) {
   const body = await request.json();
-  const fields = ['is_featured', 'category_id', 'sort_order', 'status'];
+  const fields = ['is_featured', 'category_id', 'sort_order', 'status', 'allow_p2p'];
   const updates = [];
   const values = [];
   for (const f of fields) {
@@ -480,6 +616,48 @@ async function handleSyncCampaigns(auth, env) {
   return json({ ok: true, updated, total: campaigns.length });
 }
 
+async function handleListAdminFundraisers(auth, env) {
+  const rows = await env.DB.prepare(
+    `SELECT f.*, c.title AS campaign_title
+     FROM fundraisers f
+     LEFT JOIN campaigns c ON c.id = f.campaign_id
+     WHERE f.org_id = ?
+     ORDER BY f.created_at DESC`
+  ).bind(auth.org_id).all();
+  return json({ fundraisers: rows.results || [] });
+}
+
+async function handlePatchFundraiser(auth, id, request, env) {
+  const body = await request.json();
+  const fields = [
+    'supporter_name', 'story', 'image_url', 'goal_amount',
+    'status', 'is_featured',
+  ];
+  const updates = [];
+  const values = [];
+  for (const f of fields) {
+    if (f in body) {
+      updates.push(`${f} = ?`);
+      values.push(f === 'goal_amount' ? toCents(body[f] || 0) : (body[f] ?? null));
+    }
+  }
+  if (!updates.length) return err('Nothing to update');
+  updates.push('updated_at = ?');
+  values.push(now());
+  values.push(id, auth.org_id);
+  await env.DB.prepare(
+    `UPDATE fundraisers SET ${updates.join(', ')} WHERE id = ? AND org_id = ?`
+  ).bind(...values).run();
+  return json({ ok: true });
+}
+
+async function handleDeleteFundraiser(auth, id, env) {
+  await env.DB.prepare(
+    'DELETE FROM fundraisers WHERE id = ? AND org_id = ?'
+  ).bind(id, auth.org_id).run();
+  return json({ ok: true });
+}
+
 async function handleStatsOverview(auth, env) {
   const since = now() - 30 * 86400;
   const [totals, events, campaigns] = await Promise.allSettled([
@@ -512,28 +690,50 @@ async function handleStatsOverview(auth, env) {
 async function handleGsgWebhook(request, env) {
   // TODO: verify signature with env.GSG_WEBHOOK_SECRET
   const body = await request.json().catch(() => ({}));
-  const { gsg_campaign_id, amount, ref } = body;
+  const { gsg_campaign_id, amount, ref, fr } = body;
   if (!gsg_campaign_id || !ref) return err('Invalid payload');
 
   const org = await env.DB.prepare(
     'SELECT id FROM organizations WHERE slug = ?'
-  ).bind(ref).first();
+  ).bind((ref || '').toLowerCase()).first();
   if (!org) return json({ ok: true, attributed: false });
 
   const campaign = await env.DB.prepare(
     'SELECT id FROM campaigns WHERE org_id = ? AND gsg_campaign_id = ?'
   ).bind(org.id, gsg_campaign_id).first();
 
+  // If ?fr=<slug> came through, credit the P2P fundraiser too.
+  let fundraiser = null;
+  if (fr) {
+    fundraiser = await env.DB.prepare(
+      'SELECT id FROM fundraisers WHERE org_id = ? AND slug = ?'
+    ).bind(org.id, String(fr).toLowerCase()).first();
+  }
+
+  const amountCents = Math.round((amount || 0) * 100);
+  const ts = now();
+
   await env.DB.prepare(
     `INSERT INTO referral_events
-     (id, org_id, campaign_id, event_type, amount, created_at)
-     VALUES (?,?,?,?,?,?)`
+     (id, org_id, campaign_id, fundraiser_id, event_type, amount, created_at)
+     VALUES (?,?,?,?,?,?,?)`
   ).bind(
-    uuid(), org.id, campaign?.id || null, 'donation',
-    Math.round((amount || 0) * 100), now()
+    uuid(), org.id, campaign?.id || null, fundraiser?.id || null,
+    'donation', amountCents, ts
   ).run();
 
-  return json({ ok: true, attributed: true });
+  // Roll up the fundraiser's tallies so its page reflects progress.
+  if (fundraiser) {
+    await env.DB.prepare(
+      `UPDATE fundraisers
+       SET raised_amount = raised_amount + ?,
+           donor_count = donor_count + 1,
+           updated_at = ?
+       WHERE id = ?`
+    ).bind(amountCents, ts, fundraiser.id).run();
+  }
+
+  return json({ ok: true, attributed: true, fundraiser_attributed: !!fundraiser });
 }
 
 // ---------- Router ----------
@@ -559,10 +759,19 @@ export default {
       let match = p.match(/^\/api\/hub\/([^/]+)$/);
       if (m === 'GET' && match) return handlePublicHub(match[1], env);
 
+      match = p.match(/^\/api\/hub\/([^/]+)\/f\/([^/]+)$/);
+      if (m === 'GET' && match) return handlePublicFundraiser(match[1], match[2], env);
+
+      match = p.match(/^\/api\/hub\/([^/]+)\/fundraisers$/);
+      if (m === 'POST' && match) return handleCreateFundraiser(match[1], request, env);
+
       match = p.match(/^\/api\/hub\/([^/]+)\/track$/);
       if (m === 'POST' && match) return handleTrackEvent(match[1], request, env);
 
-      // Attribution redirect
+      // Attribution redirects
+      match = p.match(/^\/r\/([^/]+)\/f\/([^/]+)$/);
+      if (m === 'GET' && match) return handleFundraiserRedirect(match[1], match[2], env);
+
       match = p.match(/^\/r\/([^/]+)\/([^/]+)$/);
       if (m === 'GET' && match) return handleAttributionRedirect(match[1], match[2], url, env);
 
@@ -585,6 +794,13 @@ export default {
         match = p.match(/^\/api\/admin\/campaigns\/([^/]+)$/);
         if (m === 'PATCH' && match) return handlePatchCampaign(auth, match[1], request, env);
         if (m === 'DELETE' && match) return handleDeleteCampaign(auth, match[1], env);
+
+        if (m === 'GET' && p === '/api/admin/fundraisers')
+          return handleListAdminFundraisers(auth, env);
+
+        match = p.match(/^\/api\/admin\/fundraisers\/([^/]+)$/);
+        if (m === 'PATCH' && match) return handlePatchFundraiser(auth, match[1], request, env);
+        if (m === 'DELETE' && match) return handleDeleteFundraiser(auth, match[1], env);
 
         if (m === 'GET' && p === '/api/admin/stats/overview') return handleStatsOverview(auth, env);
       }

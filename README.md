@@ -84,11 +84,22 @@ GSG webhook → POST /webhooks/gsg/donation
 ```
 
 ## Roadmap
-- [ ] Real GSG API integration (`fetchGsgCampaign` is stubbed)
+- [x] Real GSG API integration
+- [x] Peer-to-peer fundraisers (supporters create sub-pages under a campaign)
 - [ ] Webhook signature verification
 - [ ] Categories management UI
+- [ ] Campaign updates / posts feed
+- [ ] Donor wall / recent donations
+- [ ] Hub theme presets
 - [ ] Custom domain support
 - [ ] Team members / invites
 - [ ] Nightly stats rollup cron
 - [ ] CSV export
-- [ ] Multiple hub themes
+
+## Migrations
+
+Existing deployments apply migrations in order:
+
+```bash
+npx wrangler d1 execute givehub-db --remote --file=./migrations/0001_fundraisers.sql
+```

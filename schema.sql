@@ -55,16 +55,42 @@ CREATE TABLE IF NOT EXISTS campaigns (
   category_id TEXT,
   is_featured INTEGER DEFAULT 0,
   sort_order INTEGER DEFAULT 0,
+  allow_p2p INTEGER DEFAULT 0,
   last_synced_at INTEGER,
   UNIQUE(org_id, gsg_campaign_id),
   FOREIGN KEY (org_id) REFERENCES organizations(id),
   FOREIGN KEY (category_id) REFERENCES categories(id)
 );
 
+-- Peer-to-peer fundraising pages. Supporters create their own page
+-- tied to a campaign; donations flow to GSG with a ref+fr attribution
+-- tag so the webhook can credit the fundraiser.
+CREATE TABLE IF NOT EXISTS fundraisers (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  campaign_id TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  supporter_name TEXT NOT NULL,
+  supporter_email TEXT,
+  story TEXT,
+  image_url TEXT,
+  goal_amount INTEGER DEFAULT 0,
+  raised_amount INTEGER DEFAULT 0,
+  donor_count INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'active',
+  is_featured INTEGER DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER,
+  UNIQUE(org_id, slug),
+  FOREIGN KEY (org_id) REFERENCES organizations(id),
+  FOREIGN KEY (campaign_id) REFERENCES campaigns(id)
+);
+
 CREATE TABLE IF NOT EXISTS referral_events (
   id TEXT PRIMARY KEY,
   org_id TEXT NOT NULL,
   campaign_id TEXT,
+  fundraiser_id TEXT,
   event_type TEXT NOT NULL,
   referrer_url TEXT,
   utm_source TEXT,
